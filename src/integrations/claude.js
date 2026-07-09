@@ -17,6 +17,14 @@ function binPath() {
   return fileURLToPath(new URL("../../bin/afk-notify.js", import.meta.url));
 }
 
+// Claude Code may run hook commands through a POSIX shell (Git Bash) even on
+// Windows, where an unquoted backslash escapes the next character and mangles
+// the path (`C:\nvm4w\node.exe` -> `C:nvm4wnode.exe`). Forward slashes are
+// valid in Win32 paths and safe in every shell, so normalize to those.
+function shellPath(p) {
+  return process.platform === "win32" ? p.replace(/\\/g, "/") : p;
+}
+
 function quote(p) {
   return /\s/.test(p) ? `"${p}"` : p;
 }
@@ -24,7 +32,9 @@ function quote(p) {
 // Absolute node + script path: hooks may run in a shell whose PATH
 // lacks the npm global bin dir (common on Windows).
 export function hookCommand(event) {
-  return `${quote(process.execPath)} ${quote(binPath())} send --source claude --event ${event}`;
+  const node = quote(shellPath(process.execPath));
+  const script = quote(shellPath(binPath()));
+  return `${node} ${script} send --source claude --event ${event}`;
 }
 
 const HOOK_EVENTS = {
