@@ -1,0 +1,40 @@
+{
+  "name": "afk-notify",
+  "version": "0.1.0",
+  "description": "Get notified when your AI coding agent finishes — desktop toast when you're at your desk, WeCom/DingTalk/Feishu/Slack/Discord/ntfy push when you're AFK. Works with Claude Code and Codex CLI.",
+  "type": "module",
+  "bin": {
+    "afk-notify": "bin/afk-notify.js"
+  },
+  "files": [
+    "bin",
+    "src",
+    "README.md",
+    "README.zh-CN.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=18.17"
+  },
+  "scripts": {
+    "test": "node --test"
+  },
+  "keywords": [
+    "claude-code",
+    "codex",
+    "notification",
+    "hooks",
+    "toast",
+    "wecom",
+    "dingtalk",
+    "feishu",
+    "lark",
+    "slack",
+    "discord",
+    "ntfy",
+    "ai-agent",
+    "cli"
+  ],
+  "author": "",
+  "license": "MIT"
+}
