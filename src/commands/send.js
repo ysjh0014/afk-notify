@@ -4,7 +4,7 @@ import { resolveLang } from "../core/i18n.js";
 import { buildMessage } from "../core/message.js";
 import { markStart, endSession } from "../core/session.js";
 import { shouldPushRemote } from "../core/policy.js";
-import { lastAssistantText } from "../core/transcript.js";
+import { lastAssistantText, lastToolUse, describeToolUse } from "../core/transcript.js";
 import { pushAll } from "../providers/index.js";
 import { toast } from "../providers/toast.js";
 
@@ -41,6 +41,12 @@ export async function cmdSend(args) {
   let summary = event === "waiting" ? payload.message ?? null : null;
   if (config.includeSummary && event === "done") {
     summary = assistantText;
+  }
+  if (config.includeSummary && event === "waiting") {
+    // Claude Code's own message can be as generic as "Claude needs your
+    // permission" — name the actual pending tool call when we can.
+    const detail = describeToolUse(lastToolUse(payload.transcript_path));
+    if (detail) summary = summary ? `${summary}\n${detail}` : detail;
   }
 
   const msg = buildMessage({ source, event, project, durationSec, summary, lang });

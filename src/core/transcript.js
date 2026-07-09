@@ -28,16 +28,21 @@ function extractText(content) {
   return "";
 }
 
-// Reads the most recent assistant message out of a Claude Code transcript
-// (JSONL, one message per line). Returns null on any missing/unreadable/empty
-// file instead of throwing — this is best-effort context, not a hard dependency.
-export function lastAssistantText(transcriptPath) {
-  if (!transcriptPath) return null;
+function extractToolUses(content) {
+  if (!Array.isArray(content)) return [];
+  return content.filter((block) => block?.type === "tool_use" && typeof block.name === "string");
+}
+
+// Yields assistant message content arrays from a Claude Code transcript
+// (JSONL, one entry per line), most recent first. Best-effort: any
+// missing/unreadable/malformed file just yields nothing instead of throwing.
+function* recentAssistantMessages(transcriptPath) {
+  if (!transcriptPath) return;
   let raw;
   try {
     raw = readTail(transcriptPath);
   } catch {
-    return null;
+    return;
   }
   const lines = raw.split("\n");
   // A tail read may start mid-line; that fragment can't be parsed, drop it.
@@ -51,11 +56,51 @@ export function lastAssistantText(transcriptPath) {
     } catch {
       continue;
     }
-    if (entry?.type !== "assistant") continue;
-    const text = extractText(entry.message?.content).trim();
+    if (entry?.type === "assistant") yield entry.message?.content;
+  }
+}
+
+// Most recent assistant reply text — used as the "task finished" summary and
+// as a language sample (matches what the agent is actually saying).
+export function lastAssistantText(transcriptPath) {
+  for (const content of recentAssistantMessages(transcriptPath)) {
+    const text = extractText(content).trim();
     if (text) return text;
   }
   return null;
+}
+
+// Most recent tool call — used to describe *what* a pending permission
+// request is actually for, since Claude Code's own Notification message can
+// be as generic as "Claude needs your permission".
+export function lastToolUse(transcriptPath) {
+  for (const content of recentAssistantMessages(transcriptPath)) {
+    const uses = extractToolUses(content);
+    if (uses.length) return uses[uses.length - 1];
+  }
+  return null;
+}
+
+const DETAIL_KEYS = ["command", "file_path", "path", "url", "pattern", "query", "prompt", "description"];
+const MAX_DETAIL = 120;
+
+// Short "ToolName: key argument" string for a tool_use block, e.g.
+// "Bash: git push origin main". Falls back to just the tool name when the
+// input doesn't have a field worth showing.
+export function describeToolUse(toolUse) {
+  if (!toolUse?.name) return null;
+  const input = toolUse.input;
+  if (input && typeof input === "object") {
+    for (const key of DETAIL_KEYS) {
+      const value = input[key];
+      if (typeof value === "string" && value.trim()) {
+        const flat = value.trim().replace(/\s+/g, " ");
+        const short = flat.length > MAX_DETAIL ? flat.slice(0, MAX_DETAIL) + "…" : flat;
+        return `${toolUse.name}: ${short}`;
+      }
+    }
+  }
+  return toolUse.name;
 }
 
 const CJK_RE = /[㐀-鿿豈-﫿]/;

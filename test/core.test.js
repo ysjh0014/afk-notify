@@ -7,7 +7,7 @@ import { shouldPushRemote } from "../src/core/policy.js";
 import { buildMessage, formatDuration } from "../src/core/message.js";
 import { loadConfig, configPath, maskedConfig, defaultConfig } from "../src/core/config.js";
 import { markStart, endSession } from "../src/core/session.js";
-import { lastAssistantText, detectLangFromText } from "../src/core/transcript.js";
+import { lastAssistantText, lastToolUse, describeToolUse, detectLangFromText } from "../src/core/transcript.js";
 import { resolveLang } from "../src/core/i18n.js";
 
 beforeEach(() => {
@@ -115,4 +115,29 @@ test("lastAssistantText: reads the most recent assistant message from a JSONL tr
 test("lastAssistantText: missing file or path returns null instead of throwing", () => {
   assert.equal(lastAssistantText(null), null);
   assert.equal(lastAssistantText("/no/such/file.jsonl"), null);
+});
+
+test("lastToolUse: finds the most recent pending tool call, text-only messages don't count", () => {
+  const file = path.join(fs.mkdtempSync(path.join(os.tmpdir(), "afk-transcript-")), "session.jsonl");
+  const lines = [
+    JSON.stringify({ type: "assistant", message: { role: "assistant", content: [{ type: "tool_use", name: "Read", input: { file_path: "old.js" } }] } }),
+    JSON.stringify({ type: "assistant", message: { role: "assistant", content: [{ type: "text", text: "Now running the fix." }] } }),
+    JSON.stringify({ type: "assistant", message: { role: "assistant", content: [{ type: "tool_use", name: "Bash", input: { command: "git push origin main" } }] } })
+  ];
+  fs.writeFileSync(file, lines.join("\n") + "\n");
+  const use = lastToolUse(file);
+  assert.equal(use.name, "Bash");
+  assert.equal(use.input.command, "git push origin main");
+});
+
+test("describeToolUse: prefers a known argument, falls back to the tool name", () => {
+  assert.equal(describeToolUse({ name: "Bash", input: { command: "git push origin main" } }), "Bash: git push origin main");
+  assert.equal(describeToolUse({ name: "AskUserQuestion", input: { questions: [] } }), "AskUserQuestion");
+  assert.equal(describeToolUse(null), null);
+});
+
+test("describeToolUse: long arguments are truncated", () => {
+  const desc = describeToolUse({ name: "Bash", input: { command: "x".repeat(200) } });
+  assert.ok(desc.length < 140);
+  assert.ok(desc.endsWith("…"));
 });
