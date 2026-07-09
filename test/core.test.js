@@ -7,6 +7,8 @@ import { shouldPushRemote } from "../src/core/policy.js";
 import { buildMessage, formatDuration } from "../src/core/message.js";
 import { loadConfig, configPath, maskedConfig, defaultConfig } from "../src/core/config.js";
 import { markStart, endSession } from "../src/core/session.js";
+import { lastAssistantText, detectLangFromText } from "../src/core/transcript.js";
+import { resolveLang } from "../src/core/i18n.js";
 
 beforeEach(() => {
   process.env.AFK_NOTIFY_HOME = fs.mkdtempSync(path.join(os.tmpdir(), "afk-test-"));
@@ -80,4 +82,37 @@ test("session: start/end roundtrip measures duration", async () => {
 
 test("session: unknown session returns null", () => {
   assert.equal(endSession("claude-never-started"), null);
+});
+
+test("detectLangFromText: CJK text is zh, everything else is en", () => {
+  assert.equal(detectLangFromText("已修复 winToast 函数"), "zh");
+  assert.equal(detectLangFromText("Fixed the winToast function"), "en");
+  assert.equal(detectLangFromText(""), null);
+  assert.equal(detectLangFromText(null), null);
+});
+
+test("resolveLang: sample text wins over system locale when lang is auto", () => {
+  assert.equal(resolveLang({ lang: "auto" }, "已完成任务"), "zh");
+  assert.equal(resolveLang({ lang: "auto" }, "Task finished"), "en");
+});
+
+test("resolveLang: explicit config.lang always wins over sample text", () => {
+  assert.equal(resolveLang({ lang: "en" }, "已完成任务"), "en");
+});
+
+test("lastAssistantText: reads the most recent assistant message from a JSONL transcript", () => {
+  const file = path.join(fs.mkdtempSync(path.join(os.tmpdir(), "afk-transcript-")), "session.jsonl");
+  const lines = [
+    JSON.stringify({ type: "user", message: { role: "user", content: "fix the bug" } }),
+    JSON.stringify({ type: "assistant", message: { role: "assistant", content: [{ type: "text", text: "Looking into it." }] } }),
+    JSON.stringify({ type: "assistant", message: { role: "assistant", content: [{ type: "tool_use", name: "Bash" }] } }),
+    JSON.stringify({ type: "assistant", message: { role: "assistant", content: [{ type: "text", text: "Fixed the bug." }] } })
+  ];
+  fs.writeFileSync(file, lines.join("\n") + "\n");
+  assert.equal(lastAssistantText(file), "Fixed the bug.");
+});
+
+test("lastAssistantText: missing file or path returns null instead of throwing", () => {
+  assert.equal(lastAssistantText(null), null);
+  assert.equal(lastAssistantText("/no/such/file.jsonl"), null);
 });

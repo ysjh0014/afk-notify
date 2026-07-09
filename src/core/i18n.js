@@ -1,3 +1,5 @@
+import { detectLangFromText } from "./transcript.js";
+
 const STRINGS = {
   en: {
     done: "Task finished",
@@ -17,10 +19,15 @@ const STRINGS = {
   }
 };
 
-export function resolveLang(config) {
+// `sampleText` is a snippet of the actual conversation (the last assistant
+// message, when available) — it beats system locale because the agent's
+// reply language is what the notification should match, not the OS's.
+export function resolveLang(config, sampleText) {
   if (config?.lang && config.lang !== "auto") {
     return STRINGS[config.lang] ? config.lang : "en";
   }
+  const fromText = detectLangFromText(sampleText);
+  if (fromText) return fromText;
   try {
     const locale = Intl.DateTimeFormat().resolvedOptions().locale || "en";
     return locale.toLowerCase().startsWith("zh") ? "zh" : "en";

@@ -4,6 +4,7 @@ import { resolveLang } from "../core/i18n.js";
 import { buildMessage } from "../core/message.js";
 import { markStart, endSession } from "../core/session.js";
 import { shouldPushRemote } from "../core/policy.js";
+import { lastAssistantText } from "../core/transcript.js";
 import { pushAll } from "../providers/index.js";
 import { toast } from "../providers/toast.js";
 
@@ -25,17 +26,21 @@ export async function cmdSend(args) {
   }
 
   const config = loadConfig();
-  const lang = resolveLang(config);
   const cwd = payload.cwd || process.cwd();
   const project = path.basename(cwd);
 
   const durationSec = event === "done" ? endSession(sessionKey) : null;
 
+  // Read once, used both to pick zh/en (matches what the agent is actually
+  // speaking, not the OS locale) and, if enabled, as the "done" summary.
+  const assistantText = lastAssistantText(payload.transcript_path);
+  const lang = resolveLang(config, assistantText);
+
   // The Notification hook message ("Claude needs your permission to…")
   // is not conversation content, so it is always safe to include.
   let summary = event === "waiting" ? payload.message ?? null : null;
   if (config.includeSummary && event === "done") {
-    summary = payload["last-assistant-message"] ?? null;
+    summary = assistantText;
   }
 
   const msg = buildMessage({ source, event, project, durationSec, summary, lang });
