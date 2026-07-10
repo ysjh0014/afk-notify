@@ -40,7 +40,11 @@ export function hookCommand(event) {
 const HOOK_EVENTS = {
   UserPromptSubmit: "start",
   Stop: "done",
-  Notification: "waiting"
+  Notification: "waiting",
+  // Fires right after a tool actually runs — including the one you just
+  // approved in the CLI — so afk-notify can dismiss a pending "waiting"
+  // toast the moment the wait is actually over.
+  PostToolUse: "resume"
 };
 
 function isOurs(hook) {
@@ -75,6 +79,21 @@ export function installClaudeHooks(settingsFile = claudeSettingsPath()) {
   }
   fs.mkdirSync(path.dirname(settingsFile), { recursive: true });
   fs.writeFileSync(settingsFile, JSON.stringify(settings, null, 2) + "\n");
+}
+
+// True if this settings file already has at least one of our hooks — i.e.
+// the user previously opted in by running `init`. Used by the postinstall
+// self-heal script to decide whether it's safe to re-sync (add newly
+// introduced hook types) without ever installing anything on a machine that
+// never asked for it.
+export function hasOurHooks(settingsFile = claudeSettingsPath()) {
+  if (!fs.existsSync(settingsFile)) return false;
+  const settings = readSettings(settingsFile);
+  return Object.keys(HOOK_EVENTS).some(
+    (name) =>
+      Array.isArray(settings.hooks?.[name]) &&
+      settings.hooks[name].some((m) => Array.isArray(m?.hooks) && m.hooks.some(isOurs))
+  );
 }
 
 export function uninstallClaudeHooks(settingsFile = claudeSettingsPath()) {

@@ -6,9 +6,10 @@ import path from "node:path";
 import { shouldPushRemote } from "../src/core/policy.js";
 import { buildMessage, formatDuration } from "../src/core/message.js";
 import { loadConfig, configPath, maskedConfig, defaultConfig } from "../src/core/config.js";
-import { markStart, endSession } from "../src/core/session.js";
+import { markStart, endSession, markWaiting, takeWaitingTag, toastTag } from "../src/core/session.js";
 import { lastAssistantText, lastToolUse, describeToolUse, detectLangFromText } from "../src/core/transcript.js";
 import { resolveLang } from "../src/core/i18n.js";
+import { dismissToast } from "../src/providers/toast.js";
 
 beforeEach(() => {
   process.env.AFK_NOTIFY_HOME = fs.mkdtempSync(path.join(os.tmpdir(), "afk-test-"));
@@ -82,6 +83,26 @@ test("session: start/end roundtrip measures duration", async () => {
 
 test("session: unknown session returns null", () => {
   assert.equal(endSession("claude-never-started"), null);
+});
+
+test("session: waiting tag roundtrips and is consumed once", () => {
+  const tag = toastTag("claude-abc123");
+  markWaiting("claude-abc123", tag);
+  assert.equal(takeWaitingTag("claude-abc123"), tag);
+  assert.equal(takeWaitingTag("claude-abc123"), null); // consumed
+});
+
+test("session: no pending waiting tag returns null", () => {
+  assert.equal(takeWaitingTag("claude-never-waited"), null);
+});
+
+test("toastTag: sanitizes to a filesystem/tag-safe string", () => {
+  assert.equal(toastTag("claude-abc/123 def"), "claude-abc_123_def");
+});
+
+test("dismissToast: no-op without a tag (nothing was ever shown)", async () => {
+  await assert.doesNotReject(dismissToast({}));
+  await assert.doesNotReject(dismissToast());
 });
 
 test("detectLangFromText: CJK text is zh, everything else is en", () => {

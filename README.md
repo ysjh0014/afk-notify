@@ -10,8 +10,8 @@ Works with **Claude Code** and **Codex CLI**. Desktop toast when you're at your 
 
 You kick off a long agent task, switch to something else, and come back 20 minutes later to find it finished 18 minutes ago — or worse, it's been sitting there waiting for your permission the whole time.
 
-- ✅ **Task finished** → toast always; phone/IM push only if the task ran ≥ 45s (configurable). Short tasks don't spam you.
-- ⏳ **Agent waiting for your approval** → pushed immediately, everywhere. This is the one you really can't miss; on Windows this desktop toast stays pinned on screen until you dismiss it, instead of auto-hiding into Action Center after a few seconds like a normal notification.
+- ✅ **Task finished** → toast always; phone/IM push only if the task ran ≥ 45s (configurable). Short tasks don't spam you. On Windows the toast lingers a bit longer than a normal notification, then auto-hides on its own — no click required.
+- ⏳ **Agent waiting for your approval** → pushed immediately, everywhere. This is the one you really can't miss; on Windows this desktop toast stays pinned on screen until it's dismissed. You don't have to click it yourself first: approving in the CLI (or replying to Claude) dismisses it automatically the moment the wait is actually over.
 - 🔒 **Private by default** → notifications carry only the agent name, project folder name, and duration. No conversation or code content unless you opt in.
 
 | | Claude Code | Codex CLI |
@@ -67,10 +67,12 @@ Example config:
 
 `afk-notify init` wires up the agents' own extension points — no daemon, no polling:
 
-- **Claude Code** (`~/.claude/settings.json`): `UserPromptSubmit` records a start timestamp, `Stop` fires the "finished" notification, `Notification` fires the "waiting for approval" alert. Your existing hooks are preserved; running `init` twice won't duplicate anything; a `.afk-notify.bak` backup is written before every change.
+- **Claude Code** (`~/.claude/settings.json`): `UserPromptSubmit` records a start timestamp, `Stop` fires the "finished" notification, `Notification` fires the "waiting for approval" alert, `PostToolUse` (fires right after a tool actually runs — including the one you just approved) auto-dismisses that alert once the wait is over. Your existing hooks are preserved; running `init` twice won't duplicate anything; a `.afk-notify.bak` backup is written before every change.
 - **Codex CLI** (`~/.codex/config.toml`): adds a `notify = […]` entry (refuses to overwrite one you already have).
 
 `afk-notify uninstall` removes exactly what `init` added and nothing else.
+
+**Upgrading:** if you've already run `init` once, every `npm update -g afk-notify` automatically re-syncs your hooks (a `postinstall` script), so a new version that adds a new hook type — like `PostToolUse` for auto-dismissing "waiting" toasts — just works after you upgrade. Nothing runs on a machine that never opted in by running `init`.
 
 ## Commands
 
@@ -89,7 +91,7 @@ afk-notify uninstall [--purge]         remove hooks; --purge also deletes ~/.afk
 
 **Linux?** Remote channels work everywhere; desktop toast uses `notify-send` if available.
 
-**Why doesn't the "waiting for approval" toast stay pinned on macOS too?** Platform limitation — Windows uses a persistent toast (`scenario="reminder"`) that requires manual dismissal. macOS's `osascript` has no equivalent way to force a banner to stay on screen; that's controlled by the system's Notifications & Focus settings, not something afk-notify can override. Same story on Linux — it depends on your notification daemon.
+**Why doesn't the "waiting for approval" toast stay pinned on macOS too?** Platform limitation — Windows uses a persistent toast (`scenario="reminder"`) that requires dismissal (manual, or automatic once you resolve the wait). macOS's `osascript` has no equivalent way to force a banner to stay on screen; that's controlled by the system's Notifications & Focus settings, not something afk-notify can override. Same story on Linux — it depends on your notification daemon. For the same reason, auto-dismiss-on-approval is currently Windows-only.
 
 **Where are my webhooks stored?** Plaintext in `~/.afk-notify/config.json` (same trust model as `.npmrc`). Treat webhook URLs like passwords; `afk-notify config` masks them when printing.
 

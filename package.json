@@ -9,6 +9,7 @@
   "files": [
     "bin",
     "src",
+    "scripts",
     "README.md",
     "README.zh-CN.md",
     "LICENSE"
@@ -17,7 +18,8 @@
     "node": ">=18.17"
   },
   "scripts": {
-    "test": "node --test"
+    "test": "node --test",
+    "postinstall": "node scripts/postinstall.js"
   },
   "keywords": [
     "claude-code",

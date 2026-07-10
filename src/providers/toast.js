@@ -1,11 +1,43 @@
 import { spawn } from "node:child_process";
 
+export const TOAST_GROUP = "afk-notify";
+
+// Well-known AppUserModelID for powershell.exe — used both to show and to
+// later look up/remove a toast, so it must match between the two calls.
+const WIN_APP_ID = "{1AC14E77-02E7-4E5D-B744-2EB1AE5198B7}\\WindowsPowerShell\\v1.0\\powershell.exe";
+
 // Desktop toast. Zero-dependency: PowerShell WinRT on Windows,
 // osascript on macOS, notify-send on Linux (best effort).
-export async function toast(msg) {
-  if (process.platform === "win32") return winToast(msg);
+//
+// opts.persistent pins the toast on screen until dismissed (used for "waiting
+// for approval" — the one you really can't miss); otherwise it lingers longer
+// than the ~5s default (duration="long") and then auto-collapses normally.
+// opts.tag lets a later dismissToast() call remove this exact notification.
+export async function toast(msg, opts = {}) {
+  if (process.platform === "win32") return winToast(msg, opts);
   if (process.platform === "darwin") return macToast(msg);
   return linuxToast(msg);
+}
+
+// Best-effort removal of a toast shown earlier with the same tag, e.g. once
+// the user approves in the CLI so the "waiting" reminder doesn't linger after
+// it's already been handled. Windows-only: mac/Linux have no zero-dependency
+// way to target one specific past notification.
+export async function dismissToast({ tag, group = TOAST_GROUP } = {}) {
+  if (process.platform !== "win32" || !tag) return;
+  const script = `
+[Windows.UI.Notifications.ToastNotificationManager, Windows.UI.Notifications, ContentType = WindowsRuntime] | Out-Null
+[Windows.UI.Notifications.ToastNotificationManager]::History.Remove('${tag.replace(/'/g, "''")}', '${group.replace(/'/g, "''")}', '${WIN_APP_ID.replace(/'/g, "''")}')
+`;
+  const encoded = Buffer.from(script, "utf16le").toString("base64");
+  await run("powershell.exe", [
+    "-NoProfile",
+    "-NonInteractive",
+    "-WindowStyle",
+    "Hidden",
+    "-EncodedCommand",
+    encoded
+  ]);
 }
 
 function run(cmd, args, timeoutMs = 10_000) {
@@ -37,17 +69,22 @@ function xmlEscape(s) {
     .replace(/'/g, "&apos;");
 }
 
-async function winToast(msg) {
-  // Every afk-notify toast stays pinned on screen (scenario="reminder") until the
-  // user dismisses it, instead of auto-collapsing to Action Center after ~5s like
-  // a normal Windows toast — the whole point is not missing it.
+async function winToast(msg, { persistent = false, tag, group = TOAST_GROUP } = {}) {
+  const toastAttrs = persistent ? ` scenario="reminder"` : ` duration="long"`;
+  const actions = persistent
+    ? `<actions><action activationType="system" arguments="dismiss" content="Dismiss"/></actions>`
+    : "";
+  const tagLines = tag
+    ? `$toast.Tag = '${tag.replace(/'/g, "''")}'\n$toast.Group = '${group.replace(/'/g, "''")}'`
+    : "";
   const script = `
 [Windows.UI.Notifications.ToastNotificationManager, Windows.UI.Notifications, ContentType = WindowsRuntime] | Out-Null
 [Windows.Data.Xml.Dom.XmlDocument, Windows.Data.Xml.Dom.XmlDocument, ContentType = WindowsRuntime] | Out-Null
 $xml = New-Object Windows.Data.Xml.Dom.XmlDocument
-$xml.LoadXml('<toast scenario="reminder"><visual><binding template="ToastGeneric"><text>${xmlEscape(msg.title).replace(/'/g, "''")}</text><text>${xmlEscape(msg.body).replace(/'/g, "''")}</text></binding></visual><actions><action activationType="system" arguments="dismiss" content="Dismiss"/></actions></toast>')
-$appId = '{1AC14E77-02E7-4E5D-B744-2EB1AE5198B7}\\WindowsPowerShell\\v1.0\\powershell.exe'
-[Windows.UI.Notifications.ToastNotificationManager]::CreateToastNotifier($appId).Show([Windows.UI.Notifications.ToastNotification]::new($xml))
+$xml.LoadXml('<toast${toastAttrs}><visual><binding template="ToastGeneric"><text>${xmlEscape(msg.title).replace(/'/g, "''")}</text><text>${xmlEscape(msg.body).replace(/'/g, "''")}</text></binding></visual>${actions}</toast>')
+$toast = [Windows.UI.Notifications.ToastNotification]::new($xml)
+${tagLines}
+[Windows.UI.Notifications.ToastNotificationManager]::CreateToastNotifier('${WIN_APP_ID.replace(/'/g, "''")}').Show($toast)
 `;
   const encoded = Buffer.from(script, "utf16le").toString("base64");
   await run("powershell.exe", [

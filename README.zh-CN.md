@@ -10,8 +10,8 @@
 
 你让 Claude 跑一个长任务，切去干别的，20 分钟后回来发现它 18 分钟前就跑完了——或者更糟：它一直卡在那儿等你授权。
 
-- ✅ **任务完成** → 桌面通知必弹；任务耗时 ≥ 45 秒（可配置）才推手机/IM，短任务不骚扰你。
-- ⏳ **等你授权** → 立即全渠道推送，这条最不能错过；Windows 上这条桌面通知会常驻屏幕，需要你手动点掉才消失（不会像普通通知几秒后自动收进操作中心）。
+- ✅ **任务完成** → 桌面通知必弹；任务耗时 ≥ 45 秒（可配置）才推手机/IM，短任务不骚扰你。Windows 上这条通知比普通通知多停留一会儿，然后自动收起，不用你点。
+- ⏳ **等你授权** → 立即全渠道推送，这条最不能错过；Windows 上这条桌面通知会常驻屏幕直到被关闭。不需要你先手动点掉它——在 CLI 里同意（或者回复 Claude）之后，一旦这个等待真正结束，它会自动消失。
 - 🔒 **默认保护隐私** → 通知只含代理名、项目文件夹名、耗时，不含对话和代码内容（可选开启摘要）。
 
 | | Claude Code | Codex CLI |
@@ -66,10 +66,12 @@ afk-notify test
 
 `afk-notify init` 只是接上两个代理官方的扩展点——没有常驻进程、不轮询：
 
-- **Claude Code**（`~/.claude/settings.json`）：`UserPromptSubmit` 记录开始时间，`Stop` 触发完成通知，`Notification` 触发等授权提醒。你已有的 hooks 原样保留；重复运行 init 不会产生重复条目；每次修改前自动备份 `.afk-notify.bak`。
+- **Claude Code**（`~/.claude/settings.json`）：`UserPromptSubmit` 记录开始时间，`Stop` 触发完成通知，`Notification` 触发等授权提醒，`PostToolUse`（工具真正执行后触发——包括你刚同意的那次）在等待结束的那一刻自动关掉对应提醒。你已有的 hooks 原样保留；重复运行 init 不会产生重复条目；每次修改前自动备份 `.afk-notify.bak`。
 - **Codex CLI**（`~/.codex/config.toml`）：写入 `notify = […]`（如果你已有自己的 notify 配置，会拒绝覆盖并提示手动合并）。
 
 `afk-notify uninstall` 只移除 init 添加的内容，其他一概不动。
+
+**升级说明：** 只要你之前跑过一次 `init`，之后每次 `npm update -g afk-notify` 都会自动重新同步你的钩子（靠一个 `postinstall` 脚本），所以新版本加了新的钩子类型——比如这次用来自动关闭"等待授权"通知的 `PostToolUse`——升级后就能直接用，不用再手动跑一遍 init。从没跑过 init 的机器上，这个脚本什么都不会做。
 
 ## 命令
 
@@ -88,7 +90,7 @@ afk-notify uninstall [--purge]         移除 hooks；--purge 同时删除 ~/.af
 
 **Linux 能用吗？** 远程通道全平台可用；桌面通知在有 `notify-send` 时可用。
 
-**为什么"等你授权"的通知在 mac 上没有常驻不消失？** 这是系统限制——Windows 上用的是常驻式通知（`scenario="reminder"`），需要手动点掉；macOS 的 `osascript` 没有对应的手段能强制横幅常驻，是否常驻由系统「通知与专注模式」设置决定，afk-notify 改不了。Linux 同理，取决于你的通知守护进程。
+**为什么"等你授权"的通知在 mac 上没有常驻不消失？** 这是系统限制——Windows 上用的是常驻式通知（`scenario="reminder"`），需要手动或自动关闭；macOS 的 `osascript` 没有对应的手段能强制横幅常驻，是否常驻由系统「通知与专注模式」设置决定，afk-notify 改不了。Linux 同理，取决于你的通知守护进程。同样原因，"同意后自动消失"目前也只在 Windows 上生效。
 
 **webhook 存在哪里？** 明文存于 `~/.afk-notify/config.json`（信任模型同 `.npmrc`）。请像对待密码一样对待 webhook 地址；`afk-notify config` 打印时会自动脱敏。
 

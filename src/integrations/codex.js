@@ -51,6 +51,15 @@ export function installCodexNotify(configFile = codexConfigPath()) {
   fs.writeFileSync(configFile, lines.join("\n"));
 }
 
+// True if this config already has our `notify` line — the user previously
+// opted in by running `init`. See hasOurHooks() in claude.js for why this
+// matters to the postinstall self-heal script.
+export function hasOurNotify(configFile = codexConfigPath()) {
+  if (!fs.existsSync(configFile)) return false;
+  const lines = fs.readFileSync(configFile, "utf8").split(/\r?\n/);
+  return lines.some((l) => /^\s*notify\s*=/.test(l) && l.includes(MARKER));
+}
+
 export function uninstallCodexNotify(configFile = codexConfigPath()) {
   if (!fs.existsSync(configFile)) return false;
   const lines = fs.readFileSync(configFile, "utf8").split(/\r?\n/);
